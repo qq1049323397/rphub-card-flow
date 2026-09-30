@@ -1,0 +1,30 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['18', '20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: 全套自检
+        run: node tests/run-tests.mjs
+      - name: 三缺陷回归
+        run: node tests/fixes.mjs
+      - name: 文档契约
+        run: node tests/doc-lint.mjs
+      - name: 可移植性——换目录、无外部卡也要全绿
+        run: |
+          mkdir -p /tmp/elsewhere
+          cp -r . /tmp/elsewhere/skill
+          cd /tmp/elsewhere/skill
+          node tests/run-tests.mjs
