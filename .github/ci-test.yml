@@ -1,0 +1,44 @@
+# ⚠️ 这个文件当前不会生效 —— GitHub 只把 .github/workflows/ 下的 yml 当工作流。
+#
+# 启用方法（任选其一）：
+#   A. 网页上点几下：本文件 → 右上角 ✏️ 编辑 → 把路径改成
+#      .github/workflows/test.yml → Commit changes
+#   B. 给 token 加 workflow 权限后跑：
+#        git mv .github/ci-test.yml .github/workflows/test.yml
+#        git commit -m "ci: 启用测试工作流" && git push
+#   C. 用网页版「Add file → Create new file」，内容粘下面这段。
+#
+# 本地等价命令（不需要 CI 也能保证质量）：
+#   node tests/run-tests.mjs && node tests/fixes.mjs && node tests/doc-lint.mjs
+
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['18', '20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      # 零依赖：不需要 npm install
+      - name: 全套自检
+        run: node tests/run-tests.mjs
+      - name: 三缺陷回归
+        run: node tests/fixes.mjs
+      - name: 文档契约
+        run: node tests/doc-lint.mjs
+      - name: 可移植性——换目录、无外部卡也要全绿
+        run: |
+          mkdir -p /tmp/elsewhere
+          cp -r . /tmp/elsewhere/skill
+          cd /tmp/elsewhere/skill
+          node tests/run-tests.mjs
