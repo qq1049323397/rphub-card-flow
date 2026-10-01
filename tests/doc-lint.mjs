@@ -85,6 +85,51 @@ t('硬边界已改为能力分开声明', skill.includes('设计原则') && skil
 t('引用了两份新文件', skill.includes('design-principles.md') && skill.includes('platform-bindings.md'));
 t('不再宣称"不碰酒馆"', !/不做酒馆[（(]SillyTavern[）)]兼容/.test(skill));
 
+console.log('\n  [7] 主线/写作规则文档（v0.4.0 新增）');
+{
+  const ML = path.join(REF, 'mainline-trigger.md');
+  const WR = path.join(REF, 'worldbook-writing-rules.md');
+  const KD = path.join(REF, 'keyword-design.md');
+  const ml = read(ML);
+  const wr = read(WR);
+  const kd = read(KD);
+
+  t('mainline-trigger.md 存在', ml.length > 0);
+
+  // 原理三要素：产出者 / 每轮 / 逐字
+  t('主线文档写了产出者条目', /产出者/.test(ml));
+  t('主线文档写了「每轮」', /每轮/.test(ml));
+  t('主线文档强调逐字对齐', /逐字/.test(ml));
+  // 关键校正：推进靠收尾事实而非轮数
+  t('主线文档区分收尾事实与轮数', /收尾事实/.test(ml) && /轮数/.test(ml));
+  // 必须分流，避免给无主线的卡硬加
+  t('主线文档先分流（不需要主线的卡）', /不需要|分流/.test(ml));
+  // 小卡也要能做
+  t('主线文档覆盖小卡缩配', /小卡/.test(ml));
+
+  // SKILL.md 必须指到新文档
+  t('SKILL.md 引用 mainline-trigger.md', skill.includes('mainline-trigger.md'));
+  t('SKILL.md 引用 keyword-design.md', skill.includes('keyword-design.md'));
+
+  // 写作规则新增内容组织节，且不含平台专有字段名
+  t('写作规则含内容组织节', /内容组织/.test(wr));
+  t('写作规则含正向事实写作', /正向/.test(wr));
+  {
+    const FORBIDDEN = ['RP-Hub', 'SillyTavern', '酒馆', 'variableState', 'uiTemplate',
+      'rp_hub_ui_templates', 'markdownOnly', 'promptOnly', 'triggerSlash', 'useRegex',
+      'scanDepth', 'matchWholeWords', 'data-arcadia-state'];
+    // 写作规则与主线文档都允许出现 RP-Hub（它们是平台侧文档）；
+    // 但 design-principles.md 必须保持平台无关（[2] 已管）。
+    // 这里只锁：写作规则的第九节不得引入新的平台专有字段名。
+    const sec9 = wr.split('## 九、内容组织')[1] || '';
+    const hits = FORBIDDEN.filter((w) => w !== 'RP-Hub' && w !== 'SillyTavern' && w !== '酒馆' && sec9.includes(w));
+    t('写作规则 §9 未引入平台专有字段名', hits.length === 0, `命中: ${hits.join(', ')}`);
+  }
+
+  // 无递归但无上限的校正必须落到 keyword-design.md
+  t('keyword-design.md 已补「无递归但无上限」', /无上限/.test(kd) && /无递归/.test(kd));
+}
+
 console.log('\n  ' + '─'.repeat(60));
 console.log(`  通过 ${pass} / 失败 ${fail}\n`);
 process.exit(fail === 0 ? 0 : 1);
