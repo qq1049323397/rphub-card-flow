@@ -6,7 +6,7 @@
 
 ```
 node tests/run-tests.mjs        # 24 通过 / 0 失败，exit 0
-node tests/doc-lint.mjs         # 54 通过 / 0 失败（文档契约）
+node tests/doc-lint.mjs         # 56 通过 / 0 失败（文档契约）
 ```
 
 ---

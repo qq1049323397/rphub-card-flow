@@ -2,7 +2,7 @@
 /**
  * doc-lint.mjs — 锁住设计规范层的验收标准
  *
- * 依据：docs/superpowers/specs/2026-09-30-card-design-principles-design.md §8
+ * 依据：本 skill 的平台无关设计规范层（references/design-principles.md §8）
  * 用法: node tests/doc-lint.mjs
  */
 import fs from 'node:fs';
@@ -199,6 +199,58 @@ console.log('\n  [8] 卡型分流与小卡工艺（v0.5.0 新增）');
   // 悬空引用必须已修掉：世界书规则不得再指向包外 docs/
   t('写作规则不再指向包外 docs/', !read(path.join(REF, 'worldbook-writing-rules.md')).includes('docs/写作方法论'));
   t('写作规则改指 character-craft.md', read(path.join(REF, 'worldbook-writing-rules.md')).includes('character-craft.md'));
+}
+
+console.log('\n  [9] 全包无悬空引用 / 无本机私有信息（v0.5.0 新增）');
+{
+  // 遍历整个包（排除 node_modules），逐文件查「收件人不该看到」的东西。
+  // 收件人拿到的是一份自足的 skill：任何指向包外路径的引用都会让人白找一趟。
+  const ROOT = path.resolve(HERE, '..');
+  const SKIP = new Set(['node_modules', '.git']);
+  const SELF = path.join(HERE, 'doc-lint.mjs'); // 本文件含断言字面量，须排除
+
+  const walk = (dir, acc = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (SKIP.has(e.name)) continue;
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p, acc);
+      else acc.push(p);
+    }
+    return acc;
+  };
+
+  const files = walk(ROOT).filter((p) => /\.(md|mjs|js|json|txt)$/.test(p) && p !== SELF);
+
+  // ① 悬空引用：包外路径前缀。/tmp/ 允许（运行期临时文件）；
+  //    runtime-facts.md 的 /tmp/rphub-src 是「怎么重拉源码」的配方，属正常。
+  const DANGLING = [
+    { re: /docs\/superpowers/, why: '内部规格路径' },
+    { re: /docs\/写作方法论/, why: '包外文档路径' },
+    { re: /\/home\/[a-z]+\//, why: '本机绝对路径' },
+    { re: /\/Users\/[a-z]+\//, why: '本机绝对路径' },
+  ];
+  const danglingHits = [];
+  for (const p of files) {
+    const body = fs.readFileSync(p, 'utf8');
+    for (const { re, why } of DANGLING) {
+      if (re.test(body)) danglingHits.push(`${path.relative(ROOT, p)}(${why})`);
+    }
+  }
+  t('全包无悬空引用', danglingHits.length === 0, `命中: ${danglingHits.join(', ')}`);
+
+  // ② 本机私有信息不得外泄
+  const PRIVATE = [
+    { re: /\/home\/ubuntu/, why: '本机家目录' },
+    { re: /RP-Hub\/[a-z]/, why: '本机工作目录' },
+  ];
+  const privateHits = [];
+  for (const p of files) {
+    const body = fs.readFileSync(p, 'utf8');
+    for (const { re, why } of PRIVATE) {
+      if (re.test(body)) privateHits.push(`${path.relative(ROOT, p)}(${why})`);
+    }
+  }
+  t('全包无本机私有路径', privateHits.length === 0, `命中: ${privateHits.join(', ')}`);
 }
 
 console.log('\n  ' + '─'.repeat(60));
