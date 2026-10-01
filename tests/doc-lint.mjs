@@ -143,6 +143,64 @@ console.log('\n  [7] 主线/写作规则文档（v0.4.0 新增）');
   t('keyword-design.md 已补「无递归但无上限」', /无上限/.test(kd) && /无递归/.test(kd));
 }
 
+console.log('\n  [8] 卡型分流与小卡工艺（v0.5.0 新增）');
+{
+  const CE = path.join(REF, 'card-engineering.md');
+  const CC = path.join(REF, 'character-craft.md');
+  const ce = read(CE);
+  const cc = read(CC);
+
+  // 两份公开文档必须存在且可独立使用
+  t('card-engineering.md 存在', ce.length > 0);
+  t('character-craft.md 存在', cc.length > 0);
+
+  // 公开的两份不得含成人向体裁词（否则会把公开仓变成成人向仓库）
+  {
+    // ⚠️ 这是一份**内容边界词表**，纯用于 lint 断言，本身不是内容。
+    // 它必须内联：干净包（公开仓）里没有 extras/，无法从别处推导。
+    // 用正则而非 includes：「触发情境」/「一次性描写」这类子串不算命中。
+    const ADULT = [
+      /性事/, /交合/, /高潮/, /淫水/, /肉卡/, /性反应/, /体位/, /插入/, /情色/,
+      /敏感区/, /乳头/, /阴部/, /性癖/, /突然发情/, /精液/, /话术库/, /呻吟/,
+      /性器官/, /(?<!次)性描写/, /前戏/, /射精/, /勃起/, /阴道/, /子宫/,
+    ];
+    for (const [name, body] of [['card-engineering.md', ce], ['character-craft.md', cc]]) {
+      const hits = ADULT.filter((re) => re.test(body)).map(String);
+      t(`${name} 不含成人向体裁词`, hits.length === 0, `命中: ${hits.join(', ')}`);
+    }
+  }
+
+  // 公开的两份不得引用外部卡/文件 —— 这是「绝不去找不存在的卡」的硬保证
+  {
+    const DANGLING = [/本卡/, /椎名/, /夕凪/, /慕诗雨/, /林欣颖/,
+      /\.doc\b/, /\.html\b/, /\.png\b/, /docs\//];
+    for (const [name, body] of [['card-engineering.md', ce], ['character-craft.md', cc]]) {
+      const hits = DANGLING.filter((re) => re.test(body)).map(String);
+      t(`${name} 无外部卡/文件引用`, hits.length === 0, `命中: ${hits.join(', ')}`);
+    }
+  }
+
+  // 两份都必须显式声明「范例已内嵌、不要去找」
+  t('card-engineering 声明范例自足', /不要去找/.test(ce));
+  t('character-craft 声明范例自足', /不要去找/.test(cc));
+
+  // 条件指针：extras 不存在必须静默跳过
+  t('card-engineering 载明 extras 缺失即跳过', /跳过/.test(ce));
+  t('character-craft 载明 extras 缺失即跳过', /跳过/.test(cc));
+
+  // SKILL.md 必须做卡型分流，并把小卡工艺挂上去
+  t('SKILL.md 有卡型分流', /卡型分流/.test(skill));
+  t('SKILL.md 区分小卡与大世界', /小卡/.test(skill) && /大世界/.test(skill));
+  t('SKILL.md 警告大卡别套小卡工艺', /注意力竞争/.test(skill));
+  t('SKILL.md 引用 card-engineering.md', skill.includes('card-engineering.md'));
+  t('SKILL.md 引用 character-craft.md', skill.includes('character-craft.md'));
+  t('SKILL.md 说明 extras 条件读取', /extras\/adult-craft\.md/.test(skill));
+
+  // 悬空引用必须已修掉：世界书规则不得再指向包外 docs/
+  t('写作规则不再指向包外 docs/', !read(path.join(REF, 'worldbook-writing-rules.md')).includes('docs/写作方法论'));
+  t('写作规则改指 character-craft.md', read(path.join(REF, 'worldbook-writing-rules.md')).includes('character-craft.md'));
+}
+
 console.log('\n  ' + '─'.repeat(60));
 console.log(`  通过 ${pass} / 失败 ${fail}\n`);
 process.exit(fail === 0 ? 0 : 1);

@@ -2,3 +2,6 @@ node_modules/
 .DS_Store
 *.log
 /tmp/
+
+# 成人向内容只在全量包提供，不进公开仓库（见 README「卡型分流」）
+extras/

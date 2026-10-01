@@ -6,7 +6,7 @@
 
 ```
 node tests/run-tests.mjs        # 24 通过 / 0 失败，exit 0
-node tests/doc-lint.mjs         # 36 通过 / 0 失败（文档契约）
+node tests/doc-lint.mjs         # 54 通过 / 0 失败（文档契约）
 ```
 
 ---
@@ -45,6 +45,22 @@ node tests/doc-lint.mjs         # 36 通过 / 0 失败（文档契约）
 最常见的死法：**只做了章节条目、没做产出者契约**——键是没人会写的暗号，条目永远躺着。这就是"纯用工具做出来的主线根本没法触发"的完整病因。
 
 小卡照做，只是规模小（1 条契约 + 1~2 条阶段条目）。详见 `references/mainline-trigger.md`。
+
+
+## 卡型分流：小卡工艺 ≠ 大世界工艺（v0.5.0）
+
+**先判卡型，再决定读哪几份。** 小卡工艺里有大量"每轮都要执行"的装置，搬到条目上千的大卡上会变成**注意力竞争**——常驻条目互相抢上下文，模型的服从度反而下降。
+
+| 卡型 | 判据 | 读什么 |
+|---|---|---|
+| 小卡 / 肉卡 / 单人物卡 | 条目几十~几百；一到两个人物；场景集中 | `card-engineering.md` + `character-craft.md` |
+| 大世界卡 | 条目上千；多势力/多地点/多线 | 主流程 + `mainline-trigger.md` + `worldbook-writing-rules.md`；**别整套套用小卡工艺** |
+
+两份小卡工艺**平台无关、可独立使用**：`references/card-engineering.md`（把卡当一台状态机：五层分层、状态量、自检条目、元系统四装置、反模式总表）与 `references/character-craft.md`（把人物从零造出来且不漂移：调色盘与衍生、三面性场景路由、内核公式、五层架构与 order、P0 笔法禁令）。
+
+> 两份都**不含任何卡名或外部路径**——文中范例原文已内嵌，拿到就能独立读，不需要去找任何原卡。
+
+**成人向增量**：`extras/adult-craft.md` 只在全量包提供（公开仓库不含）。读取规则是**条件指针**——文件存在就读，不存在就**静默跳过：不搜索、不报错、不提**。普通卡用不到它，上面两份已经足够。
 
 
 ## 快速开始
@@ -163,6 +179,8 @@ references/
   design-principles.md          ★ 平台无关设计原则（三条铁律 + C1–C7）
   platform-bindings.md          ★ 能力 × 平台绑定矩阵、插件依赖
   mainline-trigger.md           ★ 主线/阶段机怎么搭才能触发（v0.4.0 新增）
+  card-engineering.md           ★ 小卡工艺（一）：卡当状态机（v0.5.0 新增）
+  character-craft.md            ★ 小卡工艺（二）：人物怎么造不漂移（v0.5.0 新增）
   key-reachability.md           五档可达性方法论 + 工具陷阱
   keyword-design.md             关键词设计（含「无递归但无上限」校正）
   runtime-facts.md              RP-Hub 运行时事实（含源码行号）
