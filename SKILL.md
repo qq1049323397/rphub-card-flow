@@ -1,6 +1,6 @@
 ---
 name: rphub-card-flow
-version: "0.4.0"
+version: "0.4.1"
 display-name: "RP-Hub 制卡流程"
 description: "RP-Hub 角色卡的分阶段制卡流程：先读出一张卡自己的世界书骨架（order 分段、每段类别、条目小节骨架、字数分布），再一段一段写、一段一段过闸门。含关键词可达性五档审查（死键/间接/常驻索引/链式——因为 RP-Hub 无递归且卡面不进扫描窗）、主线/阶段机的完整搭法（产出者-消费者阶段令牌往返，小卡到大卡缩配）、世界书内容组织与正向事实写作、正则 UI 空容器九项边界体检、白写字段检测、常驻索引覆盖检测。另含平台无关的设计原则层与平台绑定矩阵（references/design-principles.md、references/platform-bindings.md），供迁移到其它平台时复用设计思路。脚本与闸门只作用于 RP-Hub；设计原则平台无关。"
 whenToUse: "只要在 RP-Hub 工作目录下做 RP-Hub 角色卡相关工作就用：新卡开卡、写/改世界书、写人物/地点/事件/支线条目、讨论骨架或分阶段推进、搭主线/阶段机制、主线剧情触发不了、讨论阶段推进怎么设计、检查卡出没出问题、查世界书不触发、查正则 UI 顶部多出空容器/额外气泡、做交付体检、或用户提到制卡/角色卡/世界书/主线/阶段/正则/变量UI/开场白/正文容器。"
@@ -207,6 +207,14 @@ node regex-doctor.mjs --scan-dir=<你的 RP-Hub 目录>   # 全库批量
 - **PNG 读取优先级是 `chara` → `ccv3` → JSON 嗅探**。源码里**没有** `RoleplayHubCard`（已弃用）。解包器必须按这个顺序，否则对同时带两块的卡会读到旧的那份。
 - **`position` 决定注入位置**：`system_top`（最前，常驻规则用）/ `before_char` / `after_char` / `at_depth`（配合 `depth`）/ `global_note` / `user_top` / `assistant_top`。
 - **触发是大小写不敏感的子串匹配**（`useRegex=false` 时），不是分词，不是模糊匹配。
+- **卡内正则不会吃掉关键词**（2026-09-30 更正，推翻本插件早先说法）：
+  美化/隐藏正则只作用于**渲染那一份**，返回值**从不写回 `chatHistory`**；
+  扫描窗读存储原文（`app.js` L4359，该函数体内 `processRegex` 出现 **0 次**）。
+  所以 `markdownOnly` 正则（如 ArC `ARCADIA主线阶段隐藏`）**玩家看不见、下一轮照样触发** ——
+  `isPrompt && userOnly` 会在送 prompt 时直接跳过它。
+  **"美化里不显示" ≠ "触发不了"。**
+  真正会在存储层改写令牌的是宿主内置**文风过滤**（`styleFilterEnabled` 默认开，
+  `app.js` L4902/L1063）→ 阶段名避开 `极其`/`一抹`/`像在` 等词（见 `references/mainline-trigger.md` §六附）。
 - **`triggerSlash` 是预填通道，不是直达通道**：卡内 HTML 用 `data-slash="文本"`，点击后文本进 `pendingCardInteraction` 并聚焦输入框，**仍需玩家按发送**。
 - **注入顺序**：常数条目优先，然后按 `order` 降序。
 - **自己写的着色/美化正则会打断别人的结构化标签**：插了 HTML 标签的着色正则，

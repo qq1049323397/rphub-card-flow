@@ -12,7 +12,7 @@
 | zip 内部自相矛盾：`scanDepth=null`=「全楼扫描」 vs 「=全局默认 2」 | 后半句对。`data-services.js` L603 `entry.scanDepth ?? settings.scanDepth`，全局默认 2（app.js L1309） | 采信「默认 2」；前半句删除 |
 | zip：`triggerSlash` 把字面**真送进**对话流 | ⚠️ **半对**。`app.js` L7723-7735 只把文本存进 `pendingCardInteraction` 并聚焦输入框；**不会自动发送**，需玩家按发送 | 降级为「预填通道」，不是直达通道 |
 | zip：`selective`/`secondary_keys` 是配置噪音 | ✅ 对，且更强：RP-Hub **完全不读**这两个字段（grep 零命中） | 归入白写字段 |
-| zip：`markdownOnly` 正则改写的须验 `replaceString` 保留 `$1` | ✅ 对。`replaceString` 不含 `$1` 会抹掉令牌，下轮扫不到 | 采纳 |
+| zip：`markdownOnly` 正则改写的须验 `replaceString` 保留 `$1` | ⚠️ **前提错，结论不成立**（2026-09-30 更正）。卡内正则**从不写回 `chatHistory`**：`applyDisplayRegex`→`processRegex({isDisplay:true})` 的返回值只喂给渲染；扫描窗读存储原文（`app.js` L4359，函数体内 `processRegex` 出现 0 次）。ArC `ARCADIA主线阶段隐藏` 正是 `markdownOnly:true`+`replaceString:"$1"`，**隐藏了显示、但下一轮照常触发** | **已更正**：改写为「阶段名避开宿主文风过滤词」（见 `mainline-trigger.md` §六附）。`gate.mjs` 的 `正则吞令牌` 一项**脚本未改**（本轮只改文档），仍按旧口径输出 `warn` —— 看到它时以本节结论为准 |
 | 报告：零长匹配 `[\s\S]*?` 在 HTML 开场前插入空容器 | ✅ **对**，已用真实源码链复现 | 见 `regex-ui-audit.md` |
 | 报告提议的修正 `^(?!\s*<!DOCTYPE)([\s\S]+?)(?=<!DOCTYPE\|$)` | ⚠️ **不完整**。漏了「无 DOCTYPE 的 `<html>`」和 `<?xml` 声明开头 | 换成下面的最终版 |
 

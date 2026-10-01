@@ -126,6 +126,19 @@ console.log('\n  [7] 主线/写作规则文档（v0.4.0 新增）');
     t('写作规则 §9 未引入平台专有字段名', hits.length === 0, `命中: ${hits.join(', ')}`);
   }
 
+  // ── 2026-09-30 关键校正：卡内正则不会吃掉令牌 ──────────────────────
+  // 早先版本采信外来资料，写了「承接正则必须保留 $1」。经源码验证这是错的：
+  // 卡内正则只作用于渲染那一份，从不写回 chatHistory。必须锁住新说法。
+  t('主线文档否定了「正则吞令牌」旧说法', /卡内正则不会吃掉阶段行/.test(ml));
+  t('主线文档区分隐藏与删除', /美化里不显示/.test(ml) && /触发不了/.test(ml));
+  t('主线文档点名 markdownOnly 会被 prompt 路径跳过', /isPrompt && userOnly/.test(ml));
+  t('主线文档给出真正会改写的机制（文风过滤）', /文风过滤/.test(ml));
+  t('主线文档列出过滤禁用词', /极其/.test(ml) && /像在/.test(ml));
+  t('主线文档不再要求承接正则保留 $1', !/承接正则必须保留/.test(ml));
+  t('keyword-design 不再教「$1 保留」', !/令牌键必须验/.test(kd));
+  t('key-reachability 已把该条标为不成立', /前提错，结论不成立/.test(read(path.join(REF, 'key-reachability.md'))));
+  t('SKILL.md 载明卡内正则不吃关键词', /卡内正则不会吃掉关键词/.test(skill));
+
   // 无递归但无上限的校正必须落到 keyword-design.md
   t('keyword-design.md 已补「无递归但无上限」', /无上限/.test(kd) && /无递归/.test(kd));
 }

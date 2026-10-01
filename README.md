@@ -6,7 +6,7 @@
 
 ```
 node tests/run-tests.mjs        # 24 通过 / 0 失败，exit 0
-node tests/doc-lint.mjs         # 27 通过 / 0 失败（文档契约）
+node tests/doc-lint.mjs         # 36 通过 / 0 失败（文档契约）
 ```
 
 ---
@@ -91,6 +91,21 @@ node scripts/regex-doctor.mjs --scan-dir=<卡目录>   # 全库批量
 ## 三个已经被骗过一次的坑
 
 改脚本前务必先读这一节。
+
+**0. 「正则吞令牌」这个检查的前提本身是错的（2026-09-30 更正）。**
+
+本插件早先采信了一份外来资料的说法：「`markdownOnly` 正则的 `replaceString` 不含 `$1` 会抹掉令牌，下一轮扫不到」。
+**这条不成立。** 卡内正则只作用于**渲染那一份**，返回值从不写回 `chatHistory`；
+扫描窗读的是存储原文（`app.js` L4359，该函数体内 `processRegex` 出现 **0 次**）。
+ArC 的 `ARCADIA主线阶段隐藏` 正是 `markdownOnly:true` + `replaceString:"$1"`，
+它**隐藏了显示、但下一轮照常触发**（`isPrompt && userOnly` 会在送 prompt 时直接跳过它）。
+
+**「美化里不显示」和「触发不了」是两件事。**
+真正会在**存储层**改写令牌的是宿主内置文风过滤（`styleFilterEnabled` 默认开，`app.js` L4902/L1063）。
+详见 `references/mainline-trigger.md` §六附。
+
+> 本轮**只改文档、未改脚本**（用户明确要求）。`gate.mjs` 的「正则吞令牌」仍按旧口径输出 `warn`；
+> 看到它时以本节结论为准。下面第 1、3 条讲的是这个检查**实现上**的坑，仍然有效。
 
 **1. `$$` 是字面 `$`，`$$1` 不是反向引用。**
 
