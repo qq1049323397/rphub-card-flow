@@ -253,6 +253,79 @@ console.log('\n  [9] 全包无悬空引用 / 无本机私有信息（v0.5.0 新�
   t('全包无本机私有路径', privateHits.length === 0, `命中: ${privateHits.join(', ')}`);
 }
 
+console.log('\n  [10] 不得引用不存在的卡 / 文档不得要求读者去找卡（v0.6.0 新增）');
+{
+  // 这个 skill 会整包发给别人。收件人手里**只有这份 skill，没有我们的任何卡**。
+  // 所以文档里出现一个具体的卡名/工作目录名，就是在让人去找一个不存在的东西，
+  // 白跑一趟还以为是 skill 坏了。这类引用必须全部改写成方法描述。
+  const ROOT = path.resolve(HERE, '..');
+  const SKIP = new Set(['node_modules', '.git']);
+  const SELF = path.join(HERE, 'doc-lint.mjs');
+
+  const walk = (dir, acc = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (SKIP.has(e.name)) continue;
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p, acc);
+      else acc.push(p);
+    }
+    return acc;
+  };
+
+  const files = walk(ROOT).filter((p) => /\.(md|mjs|js|json|txt)$/.test(p) && p !== SELF);
+
+  // ① 内部工作目录代号 / 某张卡内部的文件名：我们自己的组织方式，收件人没有。
+  const PHANTOM = [
+    { re: /project\s*\d+/i, why: '内部工作目录代号，收件人不存在此卡' },
+    { re: /[\w\u4e00-\u9fa5·-]{2,}\.wb\b/, why: '某张卡内部的世界书文件名' },
+  ];
+  const phantomHits = [];
+  for (const p of files) {
+    const body = fs.readFileSync(p, 'utf8');
+    for (const { re, why } of PHANTOM) {
+      if (re.test(body)) phantomHits.push(`${path.relative(ROOT, p)}(${why})`);
+    }
+  }
+  t('全包不引用内部工作目录代号', phantomHits.length === 0, `命中: ${phantomHits.join(', ')}`);
+
+  // ② 骨架一致性必须写进文档：同类条目小节顺序固定，否则等于没给标准。
+  const wbRules = read(path.join(REF, 'worldbook-writing-rules.md'));
+  t('写作规则含六类条目骨架', /六类条目的标准骨架/.test(wbRules));
+  t('骨架给出人物完整版与精简版', /人物类 · 完整骨架/.test(wbRules) && /人物类 · 精简骨架/.test(wbRules));
+  t('骨架给出事件类', /事件类 · 标准骨架/.test(wbRules));
+  t('骨架解释 最易误解', /最易误解/.test(wbRules));
+  t('骨架解释 决策优先顺序', /决策优先顺序/.test(wbRules));
+  t('骨架解释 关键关系带边界', /关键关系带边界/.test(wbRules));
+  t('骨架警告大卡常驻规模不可套小卡', /小卡照抄会直接爆预算/.test(wbRules));
+  t('骨架字段用中性词（不写作品专有名词）', /等级或评级/.test(wbRules) && !/言灵|血统等级/.test(wbRules));
+
+  // ③ 阶段交接机制必须成文，大卡与小卡两档都要有。
+  const ml = read(path.join(REF, 'mainline-trigger.md'));
+  t('主线文档含阶段交接', /阶段之间的交接/.test(ml));
+  t('交接写明下一阶段名称', /下一阶段名称/.test(ml));
+  t('交接写明下一阶段入口', /下一阶段入口/.test(ml));
+  t('交接给出小卡一行压缩写法', /小卡版：一行就够/.test(ml));
+  t('交接强调键名逐字对齐', /逐字相同/.test(ml));
+  t('交接说明无下一幕就不写', /不需要这两行/.test(ml));
+  t('交接声明来源但不复制文案', /不复制该卡的任何文案/.test(ml));
+
+  // ④ 平台自带契约（时间戳）必须进关键词文档，并说清"成立的是机制不是词类"。
+  const kw = read(path.join(REF, 'keyword-design.md'));
+  t('关键词文档含平台自带契约一档', /平台自带契约/.test(kw));
+  t('关键词文档给出载体无关判据', /有东西保证它每轮出现/.test(kw));
+  t('关键词文档警告个案巧合不可当规范', /把个案的巧合写成规范/.test(kw));
+
+  // ⑤ 致谢必须落到文档里（用户明确要求）。
+  t('SKILL.md 致谢娜娜米/ArC', /娜娜米/.test(skill) && /ArC/.test(skill));
+  t('SKILL.md 致谢酒馆预设方法论', /酒馆/.test(skill) && /预设/.test(skill));
+  t('SKILL.md 声明边界：只要骨架不要文案', /不复制任何卡的文案内容/.test(skill));
+  t('写作规则也含致谢', /ArC 超越之影/.test(wbRules) && /娜娜米喵/.test(wbRules));
+
+  // ⑥ 版本必须真的动过（这一版是 0.6.0），且只声明一处。
+  const verHits = files.filter((p) => /^version:\s*"0\.6\.0"/m.test(fs.readFileSync(p, 'utf8')));
+  t('版本已升到 0.6.0 且只声明一处', verHits.length === 1, `命中 ${verHits.length} 处`);
+}
+
 console.log('\n  ' + '─'.repeat(60));
 console.log(`  通过 ${pass} / 失败 ${fail}\n`);
 process.exit(fail === 0 ? 0 : 1);
