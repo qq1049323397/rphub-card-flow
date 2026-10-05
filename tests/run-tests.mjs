@@ -10,7 +10,7 @@
  *
  * 用法: node tests/run-tests.mjs
  */
-import { loadCard, entries } from '../scripts/rphub-card.mjs';
+import { loadCard, entries, extractBareName, checkBareNameGuard } from '../scripts/rphub-card.mjs';
 import { auditWrapper, applyOneRegex, renderSplit } from '../scripts/regex-doctor.mjs';
 import { writeCardPng, minimalCard, cleanCard } from './fixture.mjs';
 import { execFileSync } from 'node:child_process';
@@ -136,6 +136,25 @@ console.log('\n  [4] gate 退出码');
   // 干净卡必须 exit=0 —— 同样改用合成卡，避免依赖会被删掉的真实卡
   fs.writeFileSync('/tmp/clean-card.json', JSON.stringify(cleanCard()));
   t('干净卡 exit=0', run('/tmp/clean-card.json') === 0, `实际 ${run('/tmp/clean-card.json')}`);
+
+  // 4b. 裸名保底必须硬失败：键是前缀形态、正文只有裸名（货运仓库的真实病）
+  const bad = { data: { name: '裸名缺失', first_mes: 'x', character_book: { entries: [
+    { comment: '索引·表', keys: [], content: '地点：货运仓库、地点：旧教堂', constant: true, order: 10 },
+    { comment: '场所·货运仓库', keys: ['地点：货运仓库'], content: '<货运仓库>\n正文', order: 20 },
+  ] } } };
+  fs.writeFileSync('/tmp/bare-fail.json', JSON.stringify(bad));
+  t('裸名缺失 exit=1', run('/tmp/bare-fail.json') === 1);
+  let bout = '';
+  try { bout = execFileSync('node', [path.join(SCRIPTS, 'gate.mjs'), '/tmp/bare-fail.json'], { encoding: 'utf8' }); }
+  catch (e) { bout = e.stdout || ''; }
+  t('闸门报出裸名保底项', /裸名保底/.test(bout), bout.slice(0, 120));
+
+  // 4c. key-audit 的 --json 要带裸名统计（与分档是两个独立维度）
+  let aout = '';
+  try { aout = execFileSync('node', [path.join(SCRIPTS, 'key-audit.mjs'), '/tmp/bare-fail.json', '--json'], { encoding: 'utf8' }); }
+  catch (e) { aout = e.stdout || ''; }
+  let aj = null; try { aj = JSON.parse(aout); } catch { /* 解析失败则 aj 为 null */ }
+  t('key-audit 报裸名统计', !!aj && aj.bare && aj.bare.fail > 0, aout.slice(0, 120));
 }
 
 // ── 5. 正则吞令牌 ──────────────────────────────────────────────────────
@@ -182,6 +201,34 @@ console.log('\n  [7] 三缺陷回归（tests/fixes.mjs）');
     const bad = out.split('\n').filter((l) => l.includes('❌')).join(' | ');
     t('fixes.mjs 全绿', false, bad || '运行失败');
   }
+}
+
+// ── 8. 裸名保底（v0.7.0）────────────────────────────────────────────────
+console.log('\n  [8] 裸名保底');
+{
+  const mk = (comment, keys, content) => ({ comment, keys, content });
+
+  // 提取
+  t('裸名取自 content 标签', extractBareName(mk('场所·货运仓库', [], '<货运仓库>\n正文')).bare === '货运仓库');
+  t('裸名退回 comment 第二段', extractBareName(mk('人物·尼禄', [], '无标签正文')).bare === '尼禄');
+  t('三段 comment 只取中间段', extractBareName(mk('城市·铁砧城·城市档案', [], '无标签')).bare === '铁砧城');
+  t('裸名未知不报错', extractBareName(mk('', [], '')).bare === null);
+
+  // 判定：键 ⊆ 裸名
+  t('裸名入键通过', checkBareNameGuard(mk('场所·货运仓库', ['货运仓库'], '<货运仓库>')).tier === 'pass');
+  t('前缀键失败', checkBareNameGuard(mk('场所·货运仓库', ['地点：货运仓库'], '<货运仓库>')).tier === 'fail');
+  t('长专名裸名通过', checkBareNameGuard(mk('能力·黑炎龙武装修罗铠甲', ['黑炎龙武装修罗铠甲'], '<黑炎龙武装修罗铠甲>')).tier === 'pass');
+  t('西文专名通过（长度不参与判定）', checkBareNameGuard(mk('人物·Corvin', ['Corvin'], '<Corvin>')).tier === 'pass');
+  t('短键触发泛词提醒', checkBareNameGuard(mk('场所·货运仓库', ['仓库'], '<货运仓库>')).tier === 'warn');
+
+  // 豁免
+  t('constant 豁免', checkBareNameGuard({ ...mk('规则·x', [], 'c'), constant: true }).tier === 'exempt');
+  t('正则匹配枚举豁免', checkBareNameGuard(
+    { ...mk('主线·01', ['/^主线阶段：01·封城之夜$/m'], 'c'), useRegex: true },
+    { constEnumValues: ['主线阶段：01·封城之夜'] }).tier === 'exempt');
+  t('正则非枚举仍失败（豁免不过宽）', checkBareNameGuard(
+    { ...mk('能力·x', ['/装备(.+?)铠甲/'], 'c'), useRegex: true },
+    { constEnumValues: ['主线阶段：01·封城之夜'] }).tier === 'fail');
 }
 
 console.log('\n  ' + '─'.repeat(60));

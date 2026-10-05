@@ -18,6 +18,7 @@
  */
 import {
   loadCard, entries, unwrap, commentPrefix, cjkCount, quantile, deadFields,
+  checkBareNameGuard,
 } from './rphub-card.mjs';
 import { regexScripts } from './regex-doctor.mjs';
 import { keepsCapture as keepsCaptureRef } from './scan-utils.mjs';
@@ -252,6 +253,38 @@ findings.push({
   fix: '索引条目 = constant=true + 无 key + 正文里成组列出人名/地名/事件名。',
 });
 
+// ── 检查 6：裸名保底（v0.7.0，硬）──────────────────────────────────────
+// 常驻索引证明 AI「读得到」这个名字，裸名保底证明 AI「写得出」这个名字。
+// 两者不互相顶替：索引常照着键抄，两边逐字一致，于是所有工具都判通过，
+// 而正文只写裸名时键仍匹配不到（键匹配是子串匹配）。
+const constEnumValues = (() => {
+  const out = new Set();
+  for (const ce of constEntries) {
+    for (const line of String(ce.content || '').split('\n')) {
+      const v = line.trim();
+      if (v && v.length <= 40) out.add(v);
+    }
+  }
+  return [...out];
+})();
+
+const bareResults = scope
+  .filter((e) => !e.constant && e.keys.length > 0)
+  .map((e) => ({ e, r: checkBareNameGuard(e, { constEnumValues }) }));
+const bareFail = bareResults.filter((x) => x.r.tier === 'fail');
+const bareWarn = bareResults.filter((x) => x.r.tier === 'warn');
+const bareUnknown = bareResults.filter((x) => x.r.tier === 'unknown');
+
+findings.push({
+  id: 'bare-name-guard',
+  level: bareFail.length ? 'fail' : 'pass',
+  label: `裸名保底 ${bareFail.length} 条未过 / 提醒 ${bareWarn.length} / 裸名未知 ${bareUnknown.length}`,
+  detail: bareFail.slice(0, 5).map((x) => `「${x.e.comment}」裸名=${x.r.bare} 键=${x.e.keys.slice(0, 3).join('/')}`).join('  ')
+    || `全部条目都有裸名键。${bareUnknown.length ? `另有 ${bareUnknown.length} 条取不到裸名，未参与判定。` : ''}`,
+  fix: '补一个裸名键（键必须是裸名的子串，含相等）。前缀/动作形态可以留，但不能代替裸名。'
+    + '长度不限：黑炎龙武装修罗铠甲 就用全名，不要砍成「铠甲」。',
+});
+
 findings.push({
   id: 'regex-keys',
   level: unreachableRegex.length === 0 ? 'pass' : unreachableRegex.length > regexed.length * 0.4 ? 'warn' : 'pass',
@@ -311,6 +344,7 @@ if (asJson) {
       indexSaved: indexSaved.length, coverage, indirectKeys: indirectKeys.length, chainedKeys: chainedKeys.length,
       regexKeyed: regexed.length, unreachableRegex: unreachableRegex.length,
       thin: thin.length, tokenSwallow: tokenSwallow.length,
+      bareFail: bareFail.length, bareWarn: bareWarn.length, bareUnknown: bareUnknown.length,
     },
     summary, ok, findings,
     deadKeyList: deadKeys.map((e) => ({ comment: e.comment, keys: e.keys, order: e.order })),

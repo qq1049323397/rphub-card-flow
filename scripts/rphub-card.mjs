@@ -300,3 +300,76 @@ export function commentPrefix(comment) {
   }
   return c.length <= PREFIX_MAX ? c : '（无前缀）';
 }
+
+// ── 裸名保底（v0.7.0）──────────────────────────────────────────────────
+// 病因：键是「前缀形态 + 名字」（地点：货运仓库）时，正文只写裸名（货运仓库）
+// 匹配不到——键匹配是子串匹配，长键不会被短文本包含。于是条目只在
+// 「正好身处此地」那一轮活着，其余轮次全灭。修法是保证 keys 里有裸名本身。
+
+/**
+ * 条目裸名：它在正文里的自然称呼。
+ * 优先 content 开头的 <标签>（作者自己声明的实体名，最准）；
+ * 否则退回 comment 的第二段（三段式只取中间段，避免 "铁砧城·城市档案"）。
+ * 取不到返回 null —— 宁可不查，也不用切错的裸名报假问题。
+ */
+export function extractBareName(entry = {}) {
+  const m = String(entry.content || '').match(/^\s*<([^>\n]{1,40})>/);
+  if (m) return { bare: m[1].trim(), source: 'content-tag' };
+  const c = String(entry.comment || '').trim();
+  if (c) {
+    const seg = c.split('·').map((s) => s.trim()).filter(Boolean);
+    if (seg.length >= 2) return { bare: seg[1], source: 'comment' };
+  }
+  return { bare: null, source: null };
+}
+
+/**
+ * 裸名保底：每条非常驻条目，keys 里必须有它的裸名。
+ * 判据 = 存在一个键 ⊆ 裸名（含相等）—— 直接复用 keyMatches，
+ * 它的字面分支就是 bare.includes(key)，正是这个条件。
+ * 长度不参与判定：Corvin 与 黑炎龙武装修罗铠甲 同等通过。
+ *
+ * 豁免只有两类，别的都不豁免：
+ *   · constant 条目 —— 本来就不靠键触发；
+ *   · 正则键匹配到常驻枚举值 —— 有输出契约每轮逼 AI 写出那个值。
+ * 按「是不是正则」豁免是错的，会漏放「装备X」这类没人养的键。
+ */
+export function checkBareNameGuard(entry = {}, { constEnumValues = [] } = {}) {
+  if (entry.constant) return { tier: 'exempt', reason: '常驻条目不靠键触发' };
+  const { bare, source } = extractBareName(entry);
+  if (!bare) return { tier: 'unknown', reason: '取不到裸名' };
+  const keys = (entry.keys || []).map((k) => String(k).trim()).filter(Boolean);
+  if (!keys.length) return { tier: 'unknown', bare, source, reason: '无键' };
+
+  if (entry.useRegex) {
+    const hitEnum = keys.some((k) => constEnumValues.some((v) => keyMatches(entry, k, v)));
+    if (hitEnum) return { tier: 'exempt', bare, source, reason: '正则匹配常驻枚举值' };
+  }
+
+  const covered = keys.filter((k) => keyMatches(entry, k, bare));
+  if (!covered.length) return { tier: 'fail', bare, source, keys, reason: '没有键是裸名的子串' };
+  // 键严格短于裸名：只在它本身是泛词时才提醒。
+  // 「武装·叛逆残刃与斯巴达之剑」用 叛逆残刃 / 斯巴达之剑 做键是正当拆分，
+  // 不是「短键」问题；该报的是 仓库 之于 货运仓库 这种泛词风险。
+  const shortest = covered.reduce((a, b) => (a.length <= b.length ? a : b));
+  if (shortest.length < bare.length && isBroadWord(shortest)) {
+    return { tier: 'warn', bare, source, by: shortest, reason: `键「${shortest}」是泛词，可能误触发` };
+  }
+  return { tier: 'pass', bare, source, by: covered[0] };
+}
+
+/**
+ * 泛词判定：用于提醒与命名期建议。命中即可能是误触发源。
+ * 两类：整体就是类别词的（人物/地点/事件）；极短且以通用场所、物品类后缀结尾的。
+ */
+const BROAD_WORDS = new Set([
+  '人物', '角色', '地点', '场景', '事件', '任务', '系统', '世界',
+  '状态', '消息', '剧情', '设定', '规则', '继续', '现在', '情况',
+]);
+const GENERIC_TAIL = /(?:仓库|教堂|地铁|后院|渡口|商街|工房|铠甲|医院|学校|酒店|公司|公寓|广场|大厅|房间)$/;
+export function isBroadWord(text) {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (BROAD_WORDS.has(t)) return true;
+  return t.length <= 2 && GENERIC_TAIL.test(t);
+}

@@ -24,11 +24,12 @@
  *   node key-audit.mjs <card.png> [--json] [--segment=N] [--tier=A|B|C|D]
  *   node key-audit.mjs <card.png> --list-dead
  */
-import { loadCard, unwrap, entries, keyMatches } from './rphub-card.mjs';
+import { loadCard, unwrap, entries, keyMatches, checkBareNameGuard } from './rphub-card.mjs';
 
 const args = process.argv.slice(2);
 const asJson = args.includes('--json');
 const listTier = (() => { const a = args.find((x) => x.startsWith('--tier=')); return a ? a.split('=')[1].toUpperCase() : null; })();
+const listBare = args.includes('--list-bare');
 const file = args.find((a) => !a.startsWith('--'));
 if (!file) { console.error('用法: node key-audit.mjs <card.png> [--json] [--tier=A|B|C|D]'); process.exit(2); }
 
@@ -103,12 +104,35 @@ const deadLiteral = deadAll.filter(isLiteralDead);
 const deadRegex = deadAll.filter((e) => e.useRegex);
 const deadSplit = { literal: deadLiteral.length, regex: deadRegex.length };
 
+// ── 裸名保底（v0.7.0）──────────────────────────────────────────────────
+// 分档判的是「键离扫描窗多远」，裸名保底判的是「键是不是这条目的裸名」。
+// 两者独立：一张卡可以 S 档满编（索引点名）却仍然裸名缺失——索引常照着键抄。
+const constEnumValues = (() => {
+  const out = new Set();
+  for (const ce of constEntries) {
+    for (const l of String(ce.content || '').split('\n')) {
+      const v = l.trim();
+      if (v && v.length <= 40) out.add(v);
+    }
+  }
+  return [...out];
+})();
+const bareScored = scope
+  .filter((e) => !e.constant && e.keys.length > 0)
+  .map((e) => ({ e, r: checkBareNameGuard(e, { constEnumValues }) }));
+const bareFail = bareScored.filter((x) => x.r.tier === 'fail');
+const bareWarn = bareScored.filter((x) => x.r.tier === 'warn');
+const bareUnknown = bareScored.filter((x) => x.r.tier === 'unknown');
+const bareFailSet = new Set(bareFail.map((x) => x.e));
+
 if (asJson) {
   console.log(JSON.stringify({
     card: data.name || '(无名)', source, entries: all.length, scope: segLabel,
     scored: tot, constant: constantNoKey, regexEntries: regexEntries.length,
     tiers: { A: buckets.A.length, B: buckets.B.length, S: buckets.S.length, C: buckets.C.length, D: buckets.D.length },
     deadSplit,
+    bare: { fail: bareFail.length, warn: bareWarn.length, unknown: bareUnknown.length },
+    bareFailList: bareFail.map((x) => ({ comment: x.e.comment, bare: x.r.bare, keys: x.e.keys })),
     dead: buckets.D.map((e) => ({ comment: e.comment, keys: e.keys, useRegex: !!e.useRegex })),
   }, null, 1));
   process.exit(deadLiteral.length ? 1 : 0);
@@ -143,6 +167,24 @@ const noImmediate = buckets.B.length + buckets.S.length + buckets.C.length + buc
 console.log(`  能立即触发的: ${buckets.A.length}/${tot} = ${pct(buckets.A.length)}`);
 console.log(`  无立即入口的: ${noImmediate}/${tot} = ${pct(noImmediate)}  ← 靠 AI 配合、常驻点名或上游带动`);
 console.log(`  其中已被常驻索引点名兜住的: ${buckets.S.length}/${noImmediate} = ${(() => { return noImmediate ? (buckets.S.length / noImmediate * 100).toFixed(1) + '%' : '—'; })()}`);
+console.log(line);
+// 裸名保底与分档是两件事：S 档满编也可能裸名全缺（索引照键抄）
+const bareMark = bareFail.length ? '❌' : '✅';
+console.log(`  ${bareMark} 裸名保底   ${String(bareFail.length).padStart(4)} 条缺裸名键   提醒 ${bareWarn.length}   裸名未知 ${bareUnknown.length}`);
+console.log(`     判据：存在一个键 ⊆ 裸名（含相等）。长键不会被子串匹配命中，`);
+console.log(`     所以「地点：货运仓库」在正文只写「货运仓库」时永远不触发。`);
+console.log(`     与上面 S 档是两件事：索引保证 AI 读得到，裸名保证 AI 写得出。`);
+
+if (listBare) {
+  console.log(line);
+  console.log(`  裸名保底未过清单（${bareFail.length} 条）:`);
+  for (const x of bareFail.slice(0, 40)) {
+    console.log(`   · ${x.e.comment || '(无注释)'}`);
+    console.log(`     裸名: ${x.r.bare}   现有键: ${x.e.keys.join(' / ')}`);
+    console.log(`     → 补一个「${x.r.bare}」作为键`);
+  }
+  if (bareFail.length > 40) console.log(`   …还有 ${bareFail.length - 40} 条`);
+}
 
 if (listTier && buckets[listTier]) {
   console.log(line);

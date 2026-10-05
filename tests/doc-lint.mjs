@@ -321,9 +321,21 @@ console.log('\n  [10] 不得引用不存在的卡 / 文档不得要求读者去�
   t('SKILL.md 声明边界：只要骨架不要文案', /不复制任何卡的文案内容/.test(skill));
   t('写作规则也含致谢', /ArC 超越之影/.test(wbRules) && /娜娜米喵/.test(wbRules));
 
-  // ⑥ 版本必须真的动过（这一版是 0.6.0），且只声明一处。
-  const verHits = files.filter((p) => /^version:\s*"0\.6\.0"/m.test(fs.readFileSync(p, 'utf8')));
-  t('版本已升到 0.6.0 且只声明一处', verHits.length === 1, `命中 ${verHits.length} 处`);
+  // ⑥ 版本必须真的动过（这一版是 0.7.0），且只声明一处。
+  const verHits = files.filter((p) => /^version:\s*"0\.7\.0"/m.test(fs.readFileSync(p, 'utf8')));
+  t('版本已升到 0.7.0 且只声明一处', verHits.length === 1, `命中 ${verHits.length} 处`);
+
+  // ⑦ 裸名保底（v0.7.0）：铁律要落到主文档与规则文档，函数要真的导出。
+  t('SKILL.md 声明裸名保底铁律', /裸名保底/.test(skill) && /存在一个键 ⊆ 裸名/.test(skill));
+  t('SKILL.md 含命名期步骤', /第 0\.5 步：定裸名/.test(skill));
+  t('SKILL.md 反模式含前缀键', /只写「前缀 \+ 名字」当键/.test(skill));
+  const kwDesign = read(path.join(REF, 'keyword-design.md'));
+  t('关键词文档含裸名小节', /裸名保底/.test(kwDesign) && /键 ⊆ 裸名/.test(kwDesign));
+  const cardMod = fs.readFileSync(path.join(ROOT, 'scripts', 'rphub-card.mjs'), 'utf8');
+  t('rphub-card.mjs 导出裸名判定', /export function extractBareName/.test(cardMod)
+    && /export function checkBareNameGuard/.test(cardMod));
+  const gateMod = fs.readFileSync(path.join(ROOT, 'scripts', 'gate.mjs'), 'utf8');
+  t('gate.mjs 接入裸名保底检查项', /bare-name-guard/.test(gateMod));
 }
 
 console.log('\n  ' + '─'.repeat(60));

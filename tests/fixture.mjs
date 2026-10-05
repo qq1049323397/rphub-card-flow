@@ -103,7 +103,7 @@ export function cleanCard() {
   const entries = names.map((k, i) => ({
     comment: `人物·${String(i + 1).padStart(2, '0')}`,
     keys: [k],
-    content: '短正文',
+    content: `<${k}>\n短正文`,   // 标签 = 裸名 = 键 → 裸名保底通过（v0.7.0）
     order: 100 + i,
   }));
   entries.push({
