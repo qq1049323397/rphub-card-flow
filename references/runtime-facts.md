@@ -63,21 +63,39 @@
 数字写法：`0`→`before_char`，`1`→`after_char`，`2`/`3`→`global_note`，`4`→`at_depth`
 
 ### 注入顺序（实测）
-`assets/js/app.js` L4404-4434
+`assets/js/app.js` L4395-4477
 
 ```
 1. 破限预设
 2. wiGroups.system_top        ← 常驻规则放这里
 3. wiGroups.global_note
 4. 其他预设
-5. wiGroups.before_char       ← 人物/地点/能力条目放这里
-6. [Character] + mes_example
-7. wiGroups.after_char
+5. wiGroups.before_char   ┐
+6. [Character] + mes_example  ├ 这三段 join 成【一个字符串】
+7. wiGroups.after_char    ┘
+   → 作为【一条 role:'user' 消息】推入
 8. 用户信息
 ... at_depth 按 depth 插入到对话历史中
 ```
 
 排序规则（`data-services.js` L618-636）：**常数条目优先，然后 `order` 降序**；同一组内再按 `order` 升序排。
+
+**三个必须记住的机制事实**（详见 `insertion-position.md`）：
+
+1. **`before_char` 和 `after_char` 是同一条消息。** 源码 L4412-4424 把两者
+   `join('\n\n')` 成一个字符串，L4467-4475 作为一条消息推入。
+   分开只是这条消息内部的先后，**机制上没有区别**（实测：全搬 before_char 与全搬
+   after_char 组装出的消息逐字节相同）。
+2. **这条消息的 `role` 是 `user`。** 世界书设定以「玩家说过的话」的身份进入对话，
+   而且排在全部对话历史之前。
+3. **`at_depth` 会被合并进相邻的同角色消息。** 插入后
+   `postprocessContextMessages` 把相邻同角色消息用 `\n\n` 合并 ——
+   实测玩家那句 18 字变成 5150 字的 `user` 消息，世界书正文紧跟在玩家原话后面，
+   模型分不清哪句是玩家说的。
+
+**默认值**：`position` 缺省时三处源码都填 `at_depth`
+（`core-utils.js:702` / `data-services.js:633` / `app.js:8474`）。
+**漏写 `position` 等于选了 `at_depth`。**
 
 ---
 

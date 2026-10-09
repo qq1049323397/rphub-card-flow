@@ -321,9 +321,18 @@ console.log('\n  [10] 不得引用不存在的卡 / 文档不得要求读者去�
   t('SKILL.md 声明边界：只要骨架不要文案', /不复制任何卡的文案内容/.test(skill));
   t('写作规则也含致谢', /ArC 超越之影/.test(wbRules) && /娜娜米喵/.test(wbRules));
 
-  // ⑥ 版本必须真的动过（这一版是 0.7.0），且只声明一处。
-  const verHits = files.filter((p) => /^version:\s*"0\.7\.0"/m.test(fs.readFileSync(p, 'utf8')));
-  t('版本已升到 0.7.0 且只声明一处', verHits.length === 1, `命中 ${verHits.length} 处`);
+  // ⑥ 版本号只声明一处，且 SKILL.md 与 README 不许各说各的。
+  // 版本号不写死在这里 —— 写死等于每次升版本都要改测试，是测试在拖版本走。
+  const verRe = /^version:\s*"([^"]+)"/m;
+  const verHits = files
+    .map((p) => ({ p, v: (fs.readFileSync(p, 'utf8').match(verRe) || [])[1] }))
+    .filter((x) => x.v);
+  t('版本号只声明一处', verHits.length === 1,
+    verHits.length ? `命中 ${verHits.length} 处：${verHits.map((x) => path.relative(ROOT, x.p)).join(', ')}` : '一处都没有');
+  const declared = verHits[0]?.v;
+  t('SKILL.md 声明的版本与 README 一致',
+    !!declared && new RegExp(`v${declared.replace(/\./g, '\\.')}`).test(read(path.join(ROOT, 'README.md'))),
+    `SKILL.md=${declared}`);
 
   // ⑦ 裸名保底（v0.7.0）：铁律要落到主文档与规则文档，函数要真的导出。
   t('SKILL.md 声明裸名保底铁律', /裸名保底/.test(skill) && /存在一个键 ⊆ 裸名/.test(skill));

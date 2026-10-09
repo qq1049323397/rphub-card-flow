@@ -328,6 +328,133 @@ findings.push({
   fix: '在 replaceString 里回填 $1（或 {{match}}）保留令牌；只渲染、不吞掉触发词。',
 });
 
+// ── 检查 11：信息迷雾观察（v0.8.0，只报不判）──────────────────────────
+// 一张卡里有没有「作者排好的剧情线」，脚本判不出来。
+// 「阶段·C1_神物」（玩家驱动的状态档）和「主线·第1集」（作者排期）
+// 在脚本眼里都是「带编号的条目」，长得一模一样。
+// 所以这里只报观察，命中原句打出来，由作者判断是查漏还是抓加戏。
+
+// (a) 字段名说「现在」，值里却是会漂的数
+const FOG_FIELD_RE = /(当前状态|现状|现在是|此刻|目前|如今|当前)\s*[：:]\s*([^\n]{1,90})/g;
+const DRIFT_RE = /(\d+(?:\.\d+)?\s*(?:度|%|％|百分点|级|阶|层|成))|(百分之[零一二三四五六七八九十百千点]+)|(\d{4}\s*[-年/]\s*\d{1,2})/;
+const tenseDrift = [];
+for (const e of scope) {
+  for (const m of String(e.content || '').matchAll(FOG_FIELD_RE)) {
+    if (DRIFT_RE.test(m[2])) {
+      tenseDrift.push({ comment: e.comment, field: m[1], val: m[2].trim().slice(0, 46) });
+    }
+  }
+}
+
+// (b) 排期类标记 —— 只认强信号。
+// 「最后」「最终」这类泛词会刷屏；「第N回」「第N节」在中文里也当量词用（第三回＝第三次），
+// 同样会误报，都不收。只留真正的章节量词。
+const NUM_SCHED_RE = /第\s*(?:\d{1,3}|[一二三四五六七八九十]{1,3})\s*(?:集|章|话|幕|篇|卷)/g;
+const ENDGAME_RE = /(大结局|终局|结局|收束|终章|尾声)/g;
+const DATE_RE = /\d{4}\s*年\s*\d{1,2}\s*月|\d{1,2}\s*月\s*\d{1,2}\s*日/g;
+const collectMarks = (re, pred = () => true) => {
+  const out = [];
+  for (const e of scope) {
+    if (!pred(e)) continue;
+    const marks = [...new Set([...String(e.content || '').matchAll(re)].map((m) => m[0]))];
+    if (marks.length) out.push({ comment: e.comment, marks: marks.slice(0, 5), n: marks.length });
+  }
+  return out;
+};
+const numberedSched = collectMarks(NUM_SCHED_RE);
+// 结局词只有在常驻条目里才危险：常驻每轮都在，等于每轮提醒一遍「后面会怎样」
+const endgameInConst = collectMarks(ENDGAME_RE, (e) => !!e.constant);
+const dateMarks = collectMarks(DATE_RE);
+
+// (c) 同一句具体事实在多个条目里逐字重复
+const sentMap = new Map();
+for (const e of scope) {
+  const seen = new Set();
+  for (const s of String(e.content || '').split(/[\n。！？]/)) {
+    const t = s.trim();
+    if (t.length < 20 || seen.has(t)) continue;
+    seen.add(t);
+    if (!sentMap.has(t)) sentMap.set(t, []);
+    sentMap.get(t).push(e.comment);
+  }
+}
+const dupFacts = [...sentMap.entries()].filter(([, cs]) => cs.length > 1).slice(0, 12);
+
+findings.push({
+  id: 'fog-observation',
+  level: (tenseDrift.length || numberedSched.length || endgameInConst.length || dateMarks.length || dupFacts.length) ? 'warn' : 'pass',
+  label: `迷雾观察：字段时态 ${tenseDrift.length} / 编号排期 ${numberedSched.length} / 常驻结局词 ${endgameInConst.length} / 具体日期 ${dateMarks.length} / 事实重复 ${dupFacts.length} 组`,
+  detail: [
+    tenseDrift.length
+      ? `字段说「${tenseDrift[0].field}」值里是会漂的数：`
+        + tenseDrift.slice(0, 3).map((x) => `「${(x.comment || '').slice(0, 18)}」${x.field}=${x.val}`).join('；')
+      : '',
+    numberedSched.length
+      ? `编号排期：` + numberedSched.slice(0, 3).map((x) => `「${(x.comment || '').slice(0, 18)}」${x.marks.join('/')}`).join('；')
+      : '',
+    endgameInConst.length
+      ? `常驻里的结局词（每轮都在，等于每轮提醒后面会怎样）：`
+        + endgameInConst.slice(0, 3).map((x) => `「${(x.comment || '').slice(0, 18)}」${x.marks.join('/')}`).join('；')
+      : '',
+    dateMarks.length
+      ? `具体日期：` + dateMarks.slice(0, 2).map((x) => `「${(x.comment || '').slice(0, 18)}」${x.marks.join('/')}`).join('；')
+      : '',
+    dupFacts.length
+      ? `逐字重复（可能是刻意复用，也可能是漂移源）：`
+        + dupFacts.slice(0, 2).map(([t, cs]) => `「${t.slice(0, 22)}…」在 ${cs.length} 条`).join('；')
+      : '',
+  ].filter(Boolean).join('  ') || '未观察到字段时态错位、编号排期、常驻结局词、具体日期或跨条目重复事实。',
+  fix: '这一项只报观察，不判对错。作者要了主线 → 这是查漏；作者没要主线 → 这是抓 AI 自己加戏。'
+    + '字段名说「当前/现状」时值必须是开局状态；同一件事实只留一个家。详见 references/information-fog.md。',
+});
+
+// ── 检查 12：插入位置观察（v0.8.0，只报不判）──────────────────────────
+// 机制事实（源码 L4412-4475）：before_char 与 after_char 是同一条 role:'user' 消息；
+// at_depth 会被 postprocessContextMessages 合并进相邻同角色消息（粘在玩家原话后面）。
+// 默认值三处都是 at_depth（core-utils.js:702 / data-services.js:633 / app.js:8474）。
+// 闸门给分布，不给结论 —— 实测各卡做法不一，没有共识。
+const posCount = new Map();
+let posMissing = 0;
+for (const e of scope) {
+  if (!e.position) { posMissing++; continue; }
+  posCount.set(e.position, (posCount.get(e.position) || 0) + 1);
+}
+const posDist = [...posCount.entries()].sort((a, b) => b[1] - a[1]);
+// 静态设定（人物/场所/道具/传闻…）放 at_depth：不随轮次变，没有收益只有代价
+const STATIC_RE = /^(人物|场所|地点|道具|传闻|组织|势力|能力|机制|怪物|敌人|世界|档案|身体|关系|历史)[·・]/;
+const staticAtDepth = scope.filter((e) => e.position === 'at_depth' && STATIC_RE.test(String(e.comment || '')));
+// 酒馆的 @D depth=0 能选 role=system，所以那边把「输出格式/变量更新规则」放 at_depth 是对的。
+// RP-Hub 的 at_depth 没有 role 字段，照搬会粘进玩家那条消息。这类条目在 RP-Hub 该去 system_top。
+const RULE_RE = /(契约|规则|规范|法典|铁律|格式|输出结构|索引|枚举|变量|协议|约定|守则|指南|要求)/;
+// 要求 constant：酒馆那边这类条目实测 100% 常驻；不加这一条，
+// 「第十三幕 血统契约」这种剧情章节名会因为含「契约」被误抓。
+const ruleAtDepth = scope.filter((e) =>
+  e.position === 'at_depth' && e.constant
+  && !STATIC_RE.test(String(e.comment || '')) && RULE_RE.test(String(e.comment || '')));
+const noSystemTop = !posCount.has('system_top');
+
+findings.push({
+  id: 'position-observation',
+  level: (staticAtDepth.length || ruleAtDepth.length || posMissing || noSystemTop) ? 'warn' : 'pass',
+  label: `插入位置：${posDist.map(([p, c]) => `${p}×${c}`).join(' / ') || '(无)'}`,
+  detail: [
+    `before_char 与 after_char 是同一条 role:'user' 消息，只决定这条消息内部先后，机制上无区别。`,
+    staticAtDepth.length
+      ? `静态设定放 at_depth ${staticAtDepth.length} 条（放前导层与放这里模型读到的内容一样，但 at_depth 会被合并进玩家那条消息）：`
+        + staticAtDepth.slice(0, 4).map((e) => `「${(e.comment || '').slice(0, 20)}」`).join(' ')
+      : '',
+    ruleAtDepth.length
+      ? `规则/格式类条目放 at_depth ${ruleAtDepth.length} 条（酒馆那边 @D depth=0 能选 role=system，RP-Hub 没有这个字段）：`
+        + ruleAtDepth.slice(0, 4).map((e) => `「${(e.comment || '').slice(0, 20)}」`).join(' ')
+      : '',
+    posMissing ? `有 ${posMissing} 条没写 position —— 源码默认值就是 at_depth，漏写等于选了它。` : '',
+    noSystemTop ? '没有任何条目放 system_top —— 常驻规则失去了最高优先级。' : '',
+  ].filter(Boolean).join('  '),
+  fix: '规则/契约/格式/索引 → system_top；世界观与静态设定 → before_char 或 after_char（二选一）；'
+    + '只有「走到那一步才成立」的当前阶段/状态块 → at_depth。每一条都显式写 position。'
+    + '详见 references/insertion-position.md。',
+});
+
 const summary = {
   pass: findings.filter((f) => f.level === 'pass').length,
   warn: findings.filter((f) => f.level === 'warn').length,
@@ -345,11 +472,27 @@ if (asJson) {
       regexKeyed: regexed.length, unreachableRegex: unreachableRegex.length,
       thin: thin.length, tokenSwallow: tokenSwallow.length,
       bareFail: bareFail.length, bareWarn: bareWarn.length, bareUnknown: bareUnknown.length,
+      fog: {
+        tenseDrift: tenseDrift.length, numberedSched: numberedSched.length,
+        endgameInConst: endgameInConst.length, dateMarks: dateMarks.length,
+        dupFacts: dupFacts.length,
+      },
+      position: {
+        dist: Object.fromEntries(posDist), missing: posMissing,
+        staticAtDepth: staticAtDepth.length, ruleAtDepth: ruleAtDepth.length,
+      },
     },
     summary, ok, findings,
     deadKeyList: deadKeys.map((e) => ({ comment: e.comment, keys: e.keys, order: e.order })),
     thinList: thin.map((x) => ({ comment: x.e.comment, cjk: x.n, median: x.med, cat: x.cat })),
     deadFields: dead,
+    tenseDriftList: tenseDrift.slice(0, 30),
+    numberedSchedList: numberedSched.slice(0, 30),
+    endgameInConstList: endgameInConst.slice(0, 30),
+    dateMarkList: dateMarks.slice(0, 30),
+    dupFactList: dupFacts.map(([t, cs]) => ({ text: t.slice(0, 60), comments: cs })),
+    staticAtDepthList: staticAtDepth.map((e) => e.comment),
+    ruleAtDepthList: ruleAtDepth.map((e) => e.comment),
   }, null, 1));
   process.exit(ok ? 0 : 1);
 }
