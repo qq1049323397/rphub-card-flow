@@ -1,12 +1,35 @@
 # 贡献指南
 
-感谢愿意改进这套流程。改动前请先读这一页，尤其是**第一条硬要求**。
+感谢愿意改进这套流程。改动前请先读这一页，尤其是**前两条硬要求**。
+
+## 硬要求：只推这个仓库
+
+```bash
+git push origin main      # origin = https://github.com/qq1049323397/rphub-card-flow
+```
+
+这套 skill 在开发机上有**三份副本**，只有第三份是发布口：
+
+| 副本 | 性质 | 推不推 |
+|---|---|---|
+| 卡仓库里的 `rphub-card-flow/` 子目录 | 开发时的源副本，跟着卡仓库走 | ❌ 不推 |
+| `~/.dsh/skills/rphub-card-flow/` | 本机实际生效的安装副本 | ❌ 不推 |
+| 本仓库（独立 git 仓库） | **唯一的发布口** | ✅ 只推这里 |
+
+改完 skill 要把同一批文件同步到三份，然后**只在独立仓库提交推送**。
+
+⚠️ 同步时**不要用 `rsync --delete`**。本仓库有 5 个独有文件——`LICENSE`、
+`CONTRIBUTING.md`、`.gitignore`、`.github/workflows/test.yml`、`.github/ci-test.yml`——
+它们不在另外两份里，`--delete` 会把它们静默删掉，测试还是全绿，你看不出来。
+逐个 `cp` 覆盖改动的那几个文件即可。
 
 ## 硬要求：改完必须自检全绿
 
 ```bash
-node tests/run-tests.mjs     # 必须 exit 0，且「通过 24 / 失败 0」
+node tests/run-tests.mjs     # 必须 exit 0，且「失败 0」
 ```
+
+用例数会随版本增长，这里不写死数字；判据是**失败 0**。
 
 CI 也会跑这一条，红灯的 PR 不会合。
 
